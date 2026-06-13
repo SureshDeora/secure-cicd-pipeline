@@ -1,0 +1,151 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # STAGE 1: LINT — Code quality checks
+  lint:
+    name: "Stage 1: Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install flake8
+        run: pip install flake8
+
+      - name: Run flake8 (Python linter)
+        run: flake8 app/ --max-line-length=120 --statistics
+
+  # STAGE 2: SAST — Security bugs in code
+  sast:
+    name: "Stage 2: SAST (Bandit)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit security scan
+        run: bandit -r app/ -f json -o bandit-report.json || true
+
+      - name: Display Bandit results
+        run: bandit -r app/ -ll
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # STAGE 3: BUILD — Create Docker image
+  build:
+    name: "Stage 3: Build"
+    runs-on: ubuntu-latest
+    needs: [lint, sast]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t secure-app:${{ github.sha }} .
+
+      - name: Save Docker image
+        run: docker save secure-app:${{ github.sha }} -o image.tar
+
+      - name: Upload image for next stages
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+  # STAGE 4: SCA — Scan image for CVEs
+  sca:
+    name: "Stage 4: SCA (Trivy)"
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i image.tar
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "secure-app:${{ github.sha }}"
+          format: "table"
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+
+      - name: Run Trivy (save JSON report)
+        uses: aquasecurity/trivy-action@0.28.0
+        if: always()
+        with:
+          image-ref: "secure-app:${{ github.sha }}"
+          format: "json"
+          output: "trivy-report.json"
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
+  # STAGE 5: DAST — Scan running app
+  dast:
+    name: "Stage 5: DAST (OWASP ZAP)"
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load and run the app
+        run: |
+          docker load -i image.tar
+          docker run -d -p 5000:5000 --name test-app secure-app:${{ github.sha }}
+          sleep 5
+
+      - name: Verify app is running
+        run: curl -f http://localhost:5000/health || exit 1
+
+      - name: Run OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://localhost:5000"
+          rules_file_name: ""
+          cmd_options: "-a"
+
+      - name: Stop app container
+        if: always()
+        run: docker stop test-app && docker rm test-app
