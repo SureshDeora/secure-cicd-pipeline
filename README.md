@@ -38,7 +38,7 @@ To prove the pipeline works, I intentionally committed vulnerable code and a vul
 
 ![Failed Pipeline](docs/failed-pipeline.png)
 
-![Trivy scan ](docs/Trivy%20scan.png)
+![Trivy scan ](docs/Trivy scan.png)
 
 ### 2. The Remediation
 
