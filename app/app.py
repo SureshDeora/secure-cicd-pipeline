@@ -26,25 +26,29 @@ def info():
     })
 
 
-# INTENTIONALLY VULNERABLE CODE (for Bandit demo)
-# Let's see if this code is caught by the SAST scanner
 
+# SECURE CODE (vulnerabilities fixed)
 
-# B105: Hardcoded password (Bandit will flag this)
-DB_PASSWORD = "super_secret_password_123"
+# FIX B105: Use environment variables instead of hardcoded passwords
+import os
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "change-me")
 
-# B602: Shell injection risk (Bandit will flag this)
+# FIX B602: Use subprocess without shell=True
 import subprocess
 
 
 @app.route("/lookup")
 def lookup():
     domain = "example.com"
-    result = subprocess.call(f"nslookup {domain}", shell=True)
-    return jsonify({"result": str(result)})
+    result = subprocess.run(
+        ["nslookup", domain],
+        capture_output=True,
+        text=True
+    )
+    return jsonify({"result": result.stdout})
 
 
 if __name__ == "__main__":
-    # B201: Running Flask in debug mode (Bandit will flag this)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # FIX B201: Never use debug=True in production
+    app.run(host="0.0.0.0", port=5000, debug=False)
 
