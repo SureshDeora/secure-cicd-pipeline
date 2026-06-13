@@ -36,7 +36,9 @@ To prove the pipeline works, I intentionally committed vulnerable code and a vul
 
 *The pipeline failing at Stage 2 (Bandit) due to a hardcoded password and shell injection risk, and Stage 4 (Trivy) due to CVEs in the Debian base image.*
 
-**[TODO: Insert your screenshot of the FAILED pipeline here. Example: `![Failed Pipeline](docs/failed-pipeline.png)`]**
+![Failed Pipeline](docs/failed-pipeline.png)
+
+![Trivy scan ](docs/Trivy scan.png)
 
 ### 2. The Remediation
 
@@ -49,7 +51,7 @@ To fix the pipeline, I implemented the following security remediations:
 
 *After remediating the code and Dockerfile, all 5 security gates pass successfully.*
 
-**[TODO: Insert your screenshot of the PASSED (all green) pipeline here. Example: `![Passed Pipeline](docs/passed-pipeline.png)`]**
+![Passed Pipeline](docs/passed-pipeline.png)
 
 ---
 
